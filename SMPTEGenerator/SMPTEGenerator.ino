@@ -18,7 +18,7 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 
-#define VERSION "2.04"
+#define VERSION "2.05"
 
 #define FPS (30)
 
@@ -54,7 +54,7 @@
 const char * name = "none-set";
 
 bool dst = true; // Summertime europe
-bool tz = 1; // hours CET
+int tz = 1; // hours CET
 int fiddleSeconds = 0;
 
 unsigned char   frame = 0, secs = 0x10, mins = 0x20, hour = 0x30;
