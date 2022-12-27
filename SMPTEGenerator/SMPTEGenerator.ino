@@ -21,9 +21,9 @@
 #include <Preferences.h>
 
 #if CONFIG_FREERTOS_UNICORE
-#define ARDUINO_RUNNING_CORE 0
+#define CONFIG_ARDUINO_RUNNING_CORE 0
 #else
-#define ARDUINO_RUNNING_CORE 1
+#define CONFIG_ARDUINO_RUNNING_CORE 1
 #endif
 
 extern void  _setTS(unsigned char _hour, unsigned char _min, unsigned char _sec, unsigned char _frame);

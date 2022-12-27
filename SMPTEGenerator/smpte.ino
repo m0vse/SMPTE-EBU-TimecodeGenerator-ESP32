@@ -103,6 +103,10 @@ void incsmpte(int fps)
   if (hourCount < 0x24)
     return;
   hourCount = 0;
+  static int dayCount = 0;
+  dayCount++;
+  if (dayCount == 3)
+    ESP.restart();
 }
 
 

@@ -64,6 +64,8 @@ extern void fill();
 
 #define FPS (30)
 
+#define FIDDLE_BUFFER_DELAY ((float)BLOCK_NUMS * RMT_MEM_ITEM_NUM / RUNLEN / FPS)
+
 #if ((FPS != 25) && (FPS != 30))
 #error "There be dragons - this was never tested or tried."
 #endif
@@ -73,7 +75,13 @@ extern void fill();
 // our 30 fps/second. And with '3' - we are still (just) below the 15 bit
 // unsigned limit of the tick counts.
 //
-#define DIV 3
+// 2022-05-10 - Same for 25 frames - but then we use 2 (thanks Mikem).
+//
+#if (FPS == 25)
+#define DIV (2)
+#else
+#define DIV (3)
+#endif
 
 // Rather than have the pulses exactly the same; make one of them a triffle
 // longer to stay as close as we can to the 30 fps/2400 baud.
@@ -92,9 +100,17 @@ void IRAM_ATTR rmt_isr_handler(void *arg) {
   //
   RMT.int_clr.ch0_tx_thr_event = 1;
 
-  portENTER_CRITICAL(&mux);
-  refill ++;
-  portEXIT_CRITICAL(&mux);
+  refill ++; // no need for critical section protection with mux is unnecessary (since the ISR can NOT interrupt itself)
+
+
+  // It seems that clearing the interrupt again here prevents
+  // spurious duplicate interrupts, which causes us to emit occasional
+  // broken SMPTE frames which causes
+  // the clock to do its red-light flashing thing.
+  //
+  // https://github.com/dirkx/SMPTE-EBU-TimecodeGenerator-ESP32/issues/8#issue-1230773006
+
+  RMT.int_clr.ch0_tx_thr_event = 1;
 
 }
 
