@@ -62,7 +62,7 @@ extern void fill();
 #define BLOCK_NUMS (HALF_BLOCK_NUMS * 2)
 #define RUNLEN (80)
 
-#define FPS (25)
+#define FPS (30)
 
 #if ((FPS != 25) && (FPS != 30))
 #error "There be dragons - this was never tested or tried."

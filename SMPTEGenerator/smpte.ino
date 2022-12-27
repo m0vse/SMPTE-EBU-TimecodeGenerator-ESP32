@@ -30,20 +30,34 @@ unsigned char   user[8] = {
   0,
 };
 
+
 void incsmpte(int fps);
 
+
+
+#define BCD(x) (((int)(x/10)<<4) | (x % 10))
 void fillNextBlock(unsigned char block[10], int fps)
 {
   incsmpte(fps);
-
-  block[0] = (user[0] << 4) | (frame & 0xf);
-  block[1] = (user[1] << 4) | (frame >> 4) | 0 /* drop frame */ | 0 /* color */;
-  block[2] = (user[2] << 4) | (secs & 0xf);
-  block[3] = (user[3] << 4) | (secs >> 4); /* parity bit set at the very end. */
-  block[4] = (user[4] << 4) | (mins & 0xf);
-  block[5] = (user[5] << 4) | (mins >> 4);
-  block[6] = (user[6] << 4) | (hour & 0xf);
-  block[7] = (user[7] << 4) | (hour >> 4);
+/*
+  Serial.print(hourCount,HEX);
+  Serial.print(":");
+  Serial.print(minsCount,HEX);
+  Serial.print(":");
+  Serial.print(secsCount,HEX);
+  Serial.print(":");
+  Serial.print(frameCount,HEX);
+  Serial.print(":");
+  Serial.println(ms());
+  */
+  block[0] = (user[0] << 4) | (frameCount & 0xf);
+  block[1] = (user[1] << 4) | (frameCount >> 4) | 0 /* drop frame */ | 0 /* color */;
+  block[2] = (user[2] << 4) | (secsCount & 0xf);
+  block[3] = (user[3] << 4) | (secsCount >> 4); /* parity bit set at the very end. */
+  block[4] = (user[4] << 4) | (minsCount & 0xf);
+  block[5] = (user[5] << 4) | (minsCount >> 4);
+  block[6] = (user[6] << 4) | (hourCount & 0xf);
+  block[7] = (user[7] << 4) | (hourCount >> 4);
   block[8] = 0xfc; // sync/detect/direction bytes
   block[9] = 0xbf; // sync/detect/direction bytes
 
@@ -62,49 +76,48 @@ void fillNextBlock(unsigned char block[10], int fps)
 void incsmpte(int fps)
 {
   int hexfps = ((fps / 10) << 4) + (fps % 10); // 23 -> 0x23
-
-  frame++;
-  if ((frame & 0x0f) > 9)
-    frame += 6;
-  if (frame < hexfps)
+  frameCount++;
+  if ((frameCount & 0x0f) > 9)
+    frameCount += 6;
+  if (frameCount < hexfps)
     return;
-  frame = 0;
+  frameCount = 0;
 
-  secs++;
-  if ((secs & 0x0f) > 9)
-    secs += 6;
-  if (secs < 0x60)
+  secsCount++;
+  if ((secsCount & 0x0f) > 9)
+    secsCount += 6;
+  if (secsCount < 0x60)
     return;
-  secs = 0;
+  secsCount = 0;
 
-  mins++;
-  if ((mins & 0x0f) > 9)
-    mins += 6;
-  if (mins < 0x60)
+  minsCount++;
+  if ((minsCount & 0x0f) > 9)
+    minsCount += 6;
+  if (minsCount < 0x60)
     return;
-  mins = 0;
+  minsCount = 0;
 
-  hour++;
-  if ((hour & 0x0f) > 9)
-    hour += 6;
-  if (hour < 0x24)
+  hourCount++;
+  if ((hourCount & 0x0f) > 9)
+    hourCount += 6;
+  if (hourCount < 0x24)
     return;
-  hour = 0;
+  hourCount = 0;
 }
 
-#define BCD(x) (((int)(x/10)<<4) | (x % 10))
+
 
 void setTS(unsigned char _hour, unsigned char _min, unsigned char _sec) {
-  hour = BCD(_hour);
-  secs = BCD(_sec);
-  mins = BCD(_min);
-  Serial.printf("BCD Time %02x:%02x:%02x.%02x\n", hour, mins, secs, frame);
+  hourCount = BCD(_hour);
+  secsCount = BCD(_sec);
+  minsCount = BCD(_min);
+  Serial.printf("BCD Time %02x:%02x:%02x.%02x\n", hourCount, minsCount, secsCount, frameCount);
 };
 
 void _setTS(unsigned char _hour, unsigned char _min, unsigned char _sec, unsigned char _frame) {
-  hour = BCD(_hour);
-  secs = BCD(_sec);
-  mins = BCD(_min);
-  frame = BCD(_frame);
-  Serial.printf("BCD Time %02x:%02x:%02x.%02x\n", hour, mins, secs, frame);
+  hourCount = BCD(_hour);
+  secsCount = BCD(_sec);
+  minsCount = BCD(_min);
+  frameCount = BCD(_frame);
+  Serial.printf("BCD Time %02x:%02x:%02x.%02x\n", hourCount, minsCount, secsCount, frameCount);
 };
