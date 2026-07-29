@@ -1,3 +1,4 @@
+// Historical experimental sketch; excluded from the PlatformIO build.
 /* Copyright (c) 2011, 2018 Dirk-Willem van Gulik, All Rights Reserved.
                       dirkx(at)webweaving(dot)org
 
@@ -40,11 +41,7 @@ extern void fill();
 // So we use the harware based RMT system in typical, game console, `two buffer',
 // mode with one buffer getting written out; the other being prepared. And
 // defer the filling to the main loop. And therefore we'll make the buffers
-// fairly big - so a burst of network traffic does not cause issues.
-//
-// This means we have in our buffer:
-//
-//      BLOCK_NUMS * RMT_MEM_ITEM_NUM / RUNLEN / FPS = 0.256 seconds
+// fairly big - so a burt of network traffic does not cause issues.
 //
 // Unfortunately - the RMT subsystem gets confused if we do not fill it completely
 // while in looping mode (i.e. padding it after the 80 bits with the typical 'end
@@ -66,9 +63,7 @@ extern void fill();
 #define BLOCK_NUMS (HALF_BLOCK_NUMS * 2)
 #define RUNLEN (80)
 
-#define FPS (25)
-
-#define FIDDLE_BUFFER_DELAY ((float)BLOCK_NUMS * RMT_MEM_ITEM_NUM / RUNLEN / FPS)
+#define FPS (30)
 
 #if ((FPS != 25) && (FPS != 30))
 #error "There be dragons - this was never tested or tried."
@@ -78,13 +73,8 @@ extern void fill();
 // a factor of '3' as we're trying to minimise the 1/3 error we have due to
 // our 30 fps/second. And with '3' - we are still (just) below the 15 bit
 // unsigned limit of the tick counts.
-// 2022-05-10 - Same for 25 frames - but then we use 2 (thanks Mikem).
 //
-#if (FPS == 25)
-#define DIV (2)
-#else
-#define DIV (3)
-#endif
+#define DIV 3 // Was 3 but we have a 240Mhz clock!
 
 // Rather than have the pulses exactly the same; make one of them a triffle
 // longer to stay as close as we can to the 30 fps/2400 baud.
@@ -103,17 +93,10 @@ void IRAM_ATTR rmt_isr_handler(void *arg) {
   //
   RMT.int_clr.ch0_tx_thr_event = 1;
 
-  refill ++; // no need for critical section protection with mux is unnecessary (since the ISR can NOT interrupt itself)
+  portENTER_CRITICAL(&mux);
+  refill ++;
+  portEXIT_CRITICAL(&mux);
 
-
-  // It seems that clearing the interrupt again here prevents
-  // spurious duplicate interrupts, which causes us to emit occasional
-  // broken SMPTE frames which causes
-  // the clock to do its red-light flashing thing.
-  //
-  // https://github.com/dirkx/SMPTE-EBU-TimecodeGenerator-ESP32/issues/8#issue-1230773006
-
-  RMT.int_clr.ch0_tx_thr_event = 1;
 }
 
 void rmt_setup(gpio_num_t pin) {
@@ -132,7 +115,7 @@ void rmt_setup(gpio_num_t pin) {
 
   tocks1 = (int) ((double) APB_CLK_FREQ / RUNLEN / FPS / 2 / DIV + 0.5);
   tocks2 = (int) (((double) APB_CLK_FREQ / DIV - tocks1 * RUNLEN * FPS) / RUNLEN / FPS  + 0.5);
-  Serial.printf("FPS: %d/second; Tock and rate: %d,%d #-> %.2f bps (Error %.2f %%)\n",
+  Serial.printf("FPS: %d/second; Tock and rate: %d,%d #-> %.2f bps (%.1f %%)\n",
                 FPS,
                 tocks1, tocks2,
                 (double) APB_CLK_FREQ / DIV / (tocks1 + tocks2),
@@ -152,9 +135,6 @@ void rmt_setup(gpio_num_t pin) {
   ESP_ERROR_CHECK(rmt_set_source_clk(RMT_TX_CHANNEL, RMT_BASECLK_APB)); // 80 Mhz.
   ESP_ERROR_CHECK(rmt_isr_register(rmt_isr_handler, NULL, ESP_INTR_FLAG_LEVEL1, 0));
   ESP_ERROR_CHECK(rmt_set_tx_thr_intr_en(RMT_TX_CHANNEL, true, RMT_MEM_ITEM_NUM * HALF_BLOCK_NUMS));
-
-  ESP_ERROR_CHECK(rmt_tx_start(RMT_TX_CHANNEL, false));
-
 }
 
 void rmt_start()
@@ -162,8 +142,9 @@ void rmt_start()
   fill();
   fill();
   ESP_ERROR_CHECK(rmt_tx_start(RMT_TX_CHANNEL, true));
-  Serial.println("Starting to emit SMPTE stream");
 }
+
+extern void fillNextBlock(unsigned char block[10], int fps);
 
 void fill() {
   // we are keeping a lot of state - as fill runs will cross 80-bit frame runs.
@@ -211,10 +192,9 @@ void fill() {
 void rmt_loop() {
   if (refill) {
     if (refill > 1)
-      Serial.printf("Second IRQ while filling %d\n", refill);
+      Serial.printf("IRQ while filling %d\n", refill);
 
     fill();
-
     portENTER_CRITICAL(&mux);
     refill--;
     portEXIT_CRITICAL(&mux);

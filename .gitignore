@@ -1,6 +1,14 @@
 # Prerequisites
 *.d
 
+# PlatformIO
+.pio/
+.pio-core/
+.vscode/
+
+# Local credentials
+include/secrets.h
+
 # Compiled Object files
 *.slo
 *.lo

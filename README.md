@@ -1,56 +1,155 @@
-# SMPTE EB linear time cod generator.
+# ESP32 SMPTE/EBU timecode generator
 
-ESP32 based SMPTE/EBU timecode generator, with NTP slaving, for Leitch and similar studio/broadcast clocks.
+An NTP-disciplined, 25 or 30 fps linear timecode (LTC) generator for Leitch
+and similar studio/broadcast clocks. An ESP32 produces a continuous
+biphase-mark signal using its RMT peripheral and provides a responsive web
+interface for status, configuration, provisioning, and output control.
 
-## Background
+![Analog studio clock](images/analog.png)
+![Digital studio clock](images/digital.jpg)
 
-So we have a few  Leitch Illuminated 12 Inch SMPTE Timecode Analog Broadcast Studio Clocks and its more
-modern digital, 19" rack sized variant. The each take a typical studio time signal; a SMPTE/EBU style
-'audio' signal (4V p.p., baud, 80 bits, 2400Hz/4800hz FM modulated sequences of 80 bits).
+## Current platform
 
-![analog studio clock](/images/analog.png) ![digital studio clock](/images/digital.jpg)
+- PlatformIO project
+- Conventional `src/*.cpp` firmware layout with explicit module headers in
+  `include/`; no Arduino sketch preprocessing
+- Arduino-ESP32 3.3.8
+- ESP-IDF 5.5.4
+- PioArduino Espressif32 platform 55.03.38-1
+- No third-party runtime libraries; networking, OTA, Preferences, mDNS, and
+  WebServer come from the pinned ESP32 core
 
-These are then connected to some ESP32's that pick up the time from the office its NTP
-serves; and provide these to the clocks.
+The versions are pinned in `platformio.ini`, so local and CI builds use the
+same toolchain.
 
-It runs a small website to allow for a fiddle factor. E.g. to make sure people make their train.
+## Build and upload
 
-## Timezone suport
+1. Install [PlatformIO](https://platformio.org/).
+2. Copy `include/secrets.example.h` to `include/secrets.h`.
+3. Set the Wi-Fi, web, OTA, and provisioning credentials in `secrets.h`.
+   This file is ignored by Git.
+4. Build and upload:
 
-Use is made of the Espressif build in time zone support. A more complete list of TZ specifiers
-can be found at https://ftp.fau.de/aminet/util/time/tzinfo.txt and https://gist.github.com/alwynallan/24d96091655391107939
+   ```text
+   pio run
+   pio run --target upload --upload-port COM7
+   pio device monitor --port COM7 --baud 115200
+   ```
+
+The station hostname is selected from the sense input:
+`smpte-digital-clock` or `smpte-analog-clock`. The UI is available at
+`http://<hostname>.local/` or the DHCP address.
+
+If the configured network cannot be reached for 20 seconds, the device starts
+a password-protected `smpte-setup-xxxxxx` access point. Connect to it and open
+the device address to update Wi-Fi settings. Configuration is stored in NVS.
+
+Web control uses HTTP authentication when a web password is configured. OTA
+also requires its configured password. Keep this device on a trusted management
+network and do not commit `secrets.h`.
+
+## LTC timing: do not replace with queued transactions
+
+Some broadcast clocks reject even a very short pause or a skipped frame. An
+ordinary sequence of IDF 5 `rmt_transmit()` jobs was measured to insert about
+50 microseconds at transaction boundaries, so this project deliberately does
+not use that approach.
+
+The implementation uses:
+
+- one RMT transaction that never completes during normal operation;
+- an IDF 5 simple encoder that continuously feeds RMT memory;
+- two application-side symbol buffers, refilled outside interrupt context;
+- 1 MHz RMT resolution with fractional-tick dithering;
+- complete 80-bit LTC frames carried seamlessly across the 64-symbol hardware
+  memory boundary.
+
+The optional `LTC_TIMING_DIAGNOSTIC` build flag routes the output internally to
+an MCPWM hardware capture channel. On the target ESP32, sustained capture
+measured 249–500 microsecond edge intervals and no intervals over 510
+microseconds across refill boundaries. The flag is for validation only and
+should not be enabled in normal firmware.
+
+## Clock discipline
+
+ESP-IDF smooth SNTP disciplines the ESP32 system clock rather than stepping it
+on every poll. The LTC clock has a second, bounded PI control loop:
+
+- initial time is acquired from the valid system clock;
+- output waits for the first real NTP response after every boot, so a stale
+  timestamp retained across OTA cannot be emitted;
+- the currently emitted LTC phase is modeled independently of the look-ahead
+  buffers;
+- phase error is low-pass filtered;
+- RMT half-bit durations are slewed within ±500 ppm;
+- frames are not periodically skipped or repeated to correct small errors;
+- a gross clock discontinuity (including a daylight-saving transition) forces
+  an explicit LTC reacquisition instead of attempting a multi-day slew;
+- the controller handles midnight wrap correctly.
+
+The default NTP poll interval is 15 minutes. The web UI reports phase error,
+frequency correction, NTP state, and buffer underruns.
+
+The default POSIX timezone is:
+
+```text
+GMT0BST,M3.5.0/1,M10.5.0/2
+```
+
+This applies UK daylight-saving rules. The UI accepts another POSIX timezone
+and a fractional output offset ("fiddle factor").
+
+## Frame rate
+
+The default is EBU 25 fps. Build non-drop-frame 30 fps with
+`pio run -e esp32dev_30fps`.
+
+Only 25 and 30 fps are supported.
 
 ## Hardware
 
-On the back of all clocks is a typical red/black two wire spring terminal. This is internally wired to
-a 2x6 IDC connector; pin 1 and 2. It turns out that pin 3 and 4 contain a nice 5V voltage. All in all
-these 4 wires are used to wire up the ESP32 (Wemos) boards.
+The red timecode output is GPIO 13, signal return is GPIO 12, and the
+analog/digital model sense input is GPIO 14. The existing transistor interface
+can raise the ESP32 signal to the level expected by older clocks. Some
+capacitively coupled clock inputs need a 10 µF series capacitor so the LTC
+waveform crosses ground.
 
-It has been reported that some Leitch ADC-5100 directly accept the 3v3 pulse signal from the ESP32 (see https://github.com/dirkx/SMPTE-EBU-TimecodeGenerator-ESP32/issues/9#issue-1230780644).
+The auxiliary 5 V rail in some clock revisions is marginal during ESP32 RF
+startup. Firmware reduces the CPU clock to 80 MHz, selects maximum modem sleep,
+uses 2 dBm transmit power, and masks brownout reset only during the first few
+seconds of radio initialization. Brownout protection is then restored. For a
+new hardware revision, a better regulator and additional local bulk/decoupling
+capacitance are still recommended.
 
-In some other cases; e.g. with a SMPTE-input clock; the input stage expects a capacitively-coupled input. If the timecode input doesn't go below ground, it won't detect the encoded bits correctly. In this case a 10uF capacitor in series is all that is required (see https://github.com/dirkx/SMPTE-EBU-TimecodeGenerator-ESP32/issues/9#issuecomment-1241911497).
+Original interface schematic:
+[EasyEDA SMPTE ESP32 LTC NTP](https://easyeda.com/dirkx/smpte-esp32-ltc-ntp)
 
-Some units seem to not always pick up a 3v3 Peak to Peak voltage generated by the GPIO. So here you can try to add
-a small BC546 transistor (base tied to the GPIO through a 2k2 registor, E to ground, C with a 1k pullup)
-to raise the signal a bit.
+## Tests
 
-Schematic: https://easyeda.com/dirkx/smpte-esp32-ltc-ntp
+Host tests (Linux/macOS or Windows with GCC available):
 
-![schematic](https://image.easyeda.com/histories/e8ee24b1ccdd43918470f83e6aa59efe.png)
+```text
+pio test -e native
+```
 
-Note that the polarity on the internal IDC connector seem to differ between revisions/versions of the clock (or we were a bit careless putting the wires in) -- hence the diode to protect and top it off a bit.
+Tests can also run on an attached ESP32:
 
-We've intentionally wired the transistors resistor to the original voltage - to get enough Vpp.
+```text
+pio test -e esp32dev --upload-port COM7
+```
 
-## RMT / pulse trains
+They cover BCD conversion, 25/30 fps rollover, LTC sync/parity, midnight phase
+wrap, and discipline direction/limits.
 
-Some of the clocks are very sensitive to timing that is lightly off; or when you skip a frame. The angry red error leds starts to flash accusingly for a few seconds then.
+## Historical experimental sketches
 
-So we're using a careful double buffer approach with the hardwar based RTM pulse generator. As the latter will glitch when not fed multiples of 64 pulses we allow for 80 bit SMPTE/EBU frames to cross boundaries. This makes it a tad hard to figure out to 'set' the clock. 
+`legacy/experimental/` retains the historical experimental sketches and is not
+part of the PlatformIO build. Their useful concept—persistent configuration—has been
+reimplemented in the main firmware. Its mutex handling, one-shot GPS/NMEA
+connection, NTP disabling behavior, open provisioning AP, credentials in URLs,
+and non-continuous RMT control are not suitable for production and should not
+be copied into the main path.
 
-## Caveats
+## License
 
-The NTP is terribly primitive and lacks the usual long term phase locked loop that gives it nice, millisecond accuracy even when there are fluctuating network delays. Thus - we're not trying to aim for frame level accuracy. If that is of interest to you - the magic term is 'NTP clock discipline' and https://www.eecis.udel.edu/~mills/ntp/html/discipline.html is a good primer.
-
-
-
+Apache License 2.0. See [LICENSE](LICENSE).

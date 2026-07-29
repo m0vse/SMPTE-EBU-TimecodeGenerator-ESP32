@@ -1,7 +1,8 @@
+// Historical experimental sketch; excluded from the PlatformIO build.
 /* Copyright (c) 2011, 2018 Dirk-Willem van Gulik, All Rights Reserved.
  *                    dirkx(at)webweaving(dot)org
  *
- * This file is licensed to you under the Apache License, Version 2.0 
+ * This file is licensed to you under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
@@ -63,7 +64,7 @@ void ota_setup() {
 }
 
 void ota_loop() {
+  xSemaphoreTake(xWiFi,0);
   ArduinoOTA.handle();
+  xSemaphoreGive(xWiFi);
 }
-
-
