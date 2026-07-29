@@ -141,15 +141,6 @@ pio test -e esp32dev --upload-port COM7
 They cover BCD conversion, 25/30 fps rollover, LTC sync/parity, midnight phase
 wrap, and discipline direction/limits.
 
-## Historical experimental sketches
-
-`legacy/experimental/` retains the historical experimental sketches and is not
-part of the PlatformIO build. Their useful concept—persistent configuration—has been
-reimplemented in the main firmware. Its mutex handling, one-shot GPS/NMEA
-connection, NTP disabling behavior, open provisioning AP, credentials in URLs,
-and non-continuous RMT control are not suitable for production and should not
-be copied into the main path.
-
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
