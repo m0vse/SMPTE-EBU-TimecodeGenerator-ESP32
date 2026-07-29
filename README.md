@@ -48,6 +48,37 @@ Web control uses HTTP authentication when a web password is configured. OTA
 also requires its configured password. Keep this device on a trusted management
 network and do not commit `secrets.h`.
 
+## Flash layout and OTA migration
+
+The firmware uses `partitions_ota_large.csv`: two 1,984 KiB application slots,
+the existing NVS and OTA metadata partitions, and a 64 KiB coredump partition.
+The unused SPIFFS partition was removed. A normal 25 fps build currently occupies
+about 55% of either application slot instead of about 86% of the former
+1,280 KiB slot.
+
+A serial upload installs the partition table automatically. An ordinary Arduino
+OTA update cannot change an existing device's partition table, so
+`esp32dev_migrator` exists for one-time migration of deployed 4 MB clocks:
+
+1. Build it with `pio run -e esp32dev_migrator`.
+2. OTA the migrator until `/api/status` reports the original `app0` partition
+   and `"partition_migration_available": true`.
+3. Make an authenticated `POST /api/partition-migrate` request with form field
+   `confirm=large-dual-ota-v1`.
+4. After reboot, verify that `/api/status` reports
+   `"partition_layout": "large-dual-ota"` and an application partition size of
+   2,031,616 bytes.
+5. Perform a normal `esp32dev` OTA and verify that it boots from `app1`. This
+   proves future OTA updates use the relocated second slot.
+
+The migrator refuses to write unless it finds exactly 4 MB of flash, the
+expected NVS and OTA metadata partitions, both original 1,280 KiB application
+slots, a valid embedded replacement table, and execution from the original
+`app0`. It stops LTC output, rewrites one 4 KiB sector, reads it back
+byte-for-byte, and only then reboots. Do not remove power during that operation.
+The raw flash-writing endpoint is compiled only into `esp32dev_migrator`; normal
+firmware retains read-only partition diagnostics but cannot perform a migration.
+
 ## LTC timing: do not replace with queued transactions
 
 Some broadcast clocks reject even a very short pause or a skipped frame. An

@@ -16,6 +16,7 @@
 #include "network_config.h"
 #include "ntp_clock.h"
 #include "ota_service.h"
+#include "partition_migration.h"
 #include "secrets.h"
 #include "web_config.h"
 
@@ -221,6 +222,9 @@ void loop() {
   wifi_loop();
   ota_loop();
   web_loop();
+#ifdef ENABLE_PARTITION_MIGRATION
+  partitionMigrationLoop();
+#endif
   rmt_loop();
   ntp_loop();
   delay(1);

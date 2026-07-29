@@ -11,7 +11,7 @@
 static_assert(LTC_FPS == 25 || LTC_FPS == 30,
               "Only 25 and 30 frames per second are supported");
 
-inline constexpr char FIRMWARE_VERSION[] = "3.01";
+inline constexpr char FIRMWARE_VERSION[] = "3.02";
 inline constexpr unsigned int FPS = LTC_FPS;
 inline constexpr size_t LTC_FRAMES_PER_BUFFER = 8;
 inline constexpr float FIDDLE_BUFFER_DELAY =

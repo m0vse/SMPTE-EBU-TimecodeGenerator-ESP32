@@ -19,4 +19,4 @@ jobs:
       - name: Unit tests
         run: pio test -e native
       - name: Firmware build
-        run: pio run -e esp32dev -e esp32dev_30fps
+        run: pio run -e esp32dev -e esp32dev_30fps -e esp32dev_migrator

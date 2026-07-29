@@ -12,6 +12,7 @@
 #include "ltc_output.h"
 #include "network_config.h"
 #include "ntp_clock.h"
+#include "partition_migration.h"
 #include "secrets.h"
 #include "web_config.h"
 
@@ -196,6 +197,14 @@ static void handleStatus() {
   json += millis() / 1000UL;
   json += F(",\"free_heap\":");
   json += ESP.getFreeHeap();
+  json += F(",\"partition_layout\":\"");
+  json += partitionLayoutName();
+  json += F("\",\"running_partition\":\"");
+  json += partitionRunningLabel();
+  json += F("\",\"app_partition_size\":");
+  json += partitionRunningSize();
+  json += F(",\"partition_migration_available\":");
+  json += partitionMigrationAvailable() ? F("true") : F("false");
   json += '}';
   sendJson(200, json);
 }
@@ -250,6 +259,34 @@ static void handleOutput() {
                         : F("{\"message\":\"LTC output disabled\"}"));
 }
 
+#ifdef ENABLE_PARTITION_MIGRATION
+static void handlePartitionMigration() {
+  if (strlen(WEB_PASSWORD) == 0) {
+    sendJson(503, F("{\"error\":\"A web password is required for migration\"}"));
+    return;
+  }
+  if (!authenticated()) return;
+  if (!server.hasArg("confirm") ||
+      server.arg("confirm") != "large-dual-ota-v1") {
+    sendJson(400, F("{\"error\":\"Migration confirmation is required\"}"));
+    return;
+  }
+  const char *preflight = partitionMigrationPreflight();
+  if (preflight != nullptr) {
+    String json = F("{\"error\":\"");
+    json += jsonEscape(preflight);
+    json += F("\"}");
+    sendJson(409, json);
+    return;
+  }
+  if (!schedulePartitionMigration()) {
+    sendJson(409, F("{\"error\":\"Migration is already scheduled\"}"));
+    return;
+  }
+  sendJson(202, F("{\"message\":\"Partition migration scheduled\"}"));
+}
+#endif
+
 void web_setup() {
   if (strlen(WEB_PASSWORD) == 0) {
     Serial.println("Warning: web authentication is disabled");
@@ -268,6 +305,9 @@ void web_setup() {
   server.on("/api/clock", HTTP_POST, handleClockConfiguration);
   server.on("/api/wifi", HTTP_POST, handleWifiConfiguration);
   server.on("/api/output", HTTP_POST, handleOutput);
+#ifdef ENABLE_PARTITION_MIGRATION
+  server.on("/api/partition-migrate", HTTP_POST, handlePartitionMigration);
+#endif
   server.on("/api/reboot", HTTP_POST, []() {
     if (!authenticated()) return;
     sendJson(200, F("{\"message\":\"Rebooting\"}"));
