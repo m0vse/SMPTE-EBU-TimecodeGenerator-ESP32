@@ -96,8 +96,9 @@ The default POSIX timezone is:
 GMT0BST,M3.5.0/1,M10.5.0/2
 ```
 
-This applies UK daylight-saving rules. The UI accepts another POSIX timezone
-and a fractional output offset ("fiddle factor").
+This applies UK daylight-saving rules. The UI provides common regional
+timezone presets, a custom POSIX timezone option, and a fractional output
+offset ("fiddle factor").
 
 ## Frame rate
 
